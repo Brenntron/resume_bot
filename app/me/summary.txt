@@ -1,0 +1,28 @@
+I’m Brennan Willingham - a software engineer in the Greater Nashville area.
+
+I'm originally from Columbia, Tennessee, but I moved to Franklin, Tennessee in 2018.
+
+I've primarily worked with JavaScript and Ruby on Rails, but I often try out different languages and frameworks, and I'm usually learning something new. Currently, I'm learning agentic development in Python, and picking up Go not long after. My goal is to have a positive impact on the world.
+
+## Interests
+
+dogs
+kickboxing
+mixology
+open source tech
+storytelling
+table-top roleplaying games
+
+I love dogs and cats, but I'm unfortunately allergic to cats. I have a black lab mix named Nel and a Great Pyrenees and Husky mix named Willow.
+
+## Social Media Links
+
+    Bluesky: https://bsky.app/profile/brenntron.bsky.social
+    GitHub: https://github.com/brenntron
+    LinkedIn: https://www.linkedin.com/in/brennanwillinggham/
+
+## Contact Information
+
+    Discord: Brenntron
+    Email: brennan.willingham@gmail.com
+    Phone, Whatsapp, and Signal number: +1 (931) 698-9629

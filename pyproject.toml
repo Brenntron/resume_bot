@@ -1,13 +1,17 @@
 [project]
 name = "resume-bot"
 version = "0.1.0"
-description = "Add your description here"
+description = "FastAPI app that uses LLMs to answer questions about my resume."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "chromadb>=1.3.4",
+    "fastapi[standard]>=0.121.0",
     "gradio>=5.49.1",
     "openai>=2.7.1",
+    "pydantic>=2.11.10",
+    "pydantic-settings>=2.11.0",
     "pypdf>=6.1.3",
-    "python-dotenv>=1.2.1",
     "requests>=2.32.5",
+    "slowapi>=0.1.9",
 ]

@@ -1,20 +1,61 @@
-from dotenv import load_dotenv
-from openai import OpenAI
 import json
-import os
 import requests
+import logging
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from pydantic import BaseModel, EmailStr, constr
+from pydantic_settings import BaseSettings
+from openai import OpenAI
 from pypdf import PdfReader
-import gradio as gr
 
+class Settings(BaseSettings):
+    openai_api_key: str
+    pushover_token: str
+    pushover_user: str
+    allowed_origins: list[str]
+    allowed_hosts: list[str]
+    environment: str = "production"  # default to production for safety
 
-load_dotenv(override=True)
+    class Config:
+        env_file = ".env"
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment.lower() == "production"
+
+app = FastAPI()
+limiter = Limiter(key_func=get_remote_address)
+settings = Settings()
+logger = logging.getLogger(__name__)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.allowed_origins,
+    allow_credentials=True,
+    allow_methods=["post"],
+    allow_headers=["*"],
+    max_age=60,
+)
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=settings.allowed_hosts
+)
+
+# Only enable HTTPS redirect in production
+if settings.is_production:
+    app.add_middleware(HTTPSRedirectMiddleware)
 
 def push(text):
     requests.post(
         "https://api.pushover.net/1/messages.json",
         data={
-            "token": os.getenv("PUSHOVER_TOKEN"),
-            "user": os.getenv("PUSHOVER_USER"),
+            "token": settings.pushover_token,
+            "user": settings.pushover_user,
             "message": text,
         }
     )
@@ -72,19 +113,28 @@ record_unknown_question_json = {
 tools = [{"type": "function", "function": record_user_details_json},
         {"type": "function", "function": record_unknown_question_json}]
 
+class ChatMessage(BaseModel):
+    message: constr(min_length=1, max_length=1000)
+    history: list = []
+
+class UserDetails(BaseModel):
+    email: EmailStr
+    name: str | None = None
+    notes: str | None = None
 
 class Me:
 
     def __init__(self):
-        self.openai = OpenAI()
+        self.openai = OpenAI(api_key=settings.openai_api_key)
         self.name = "Brennan Willingham"
-        reader = PdfReader("me/linkedin.pdf")
+        reader = PdfReader("app/me/linkedin.pdf")
         self.linkedin = ""
+        self.summary = ""
         for page in reader.pages:
             text = page.extract_text()
             if text:
                 self.linkedin += text
-        with open("me/summary.txt", "r", encoding="utf-8") as f:
+        with open("app/me/summary.txt", "r", encoding="utf-8") as f:
             self.summary = f.read()
 
 
@@ -98,7 +148,7 @@ class Me:
             result = tool(**arguments) if tool else {}
             results.append({"role": "tool","content": json.dumps(result),"tool_call_id": tool_call.id})
         return results
-    
+
     def system_prompt(self):
         system_prompt = f"You are acting as {self.name}. You are answering questions on {self.name}'s website, \
 particularly questions related to {self.name}'s career, background, skills and experience. \
@@ -111,7 +161,7 @@ If the user is engaging in discussion, try to steer them towards getting in touc
         system_prompt += f"\n\n## Summary:\n{self.summary}\n\n## LinkedIn Profile:\n{self.linkedin}\n\n"
         system_prompt += f"With this context, please chat with the user, always staying in character as {self.name}."
         return system_prompt
-    
+
     def chat(self, message, history):
         messages = [{"role": "system", "content": self.system_prompt()}] + history + [{"role": "user", "content": message}]
         done = False
@@ -125,10 +175,46 @@ If the user is engaging in discussion, try to steer them towards getting in touc
                 messages.extend(results)
             else:
                 done = True
-        return response.choices[0].message.content
-    
+            return response.choices[0].message.content
 
-if __name__ == "__main__":
-    me = Me()
-    gr.ChatInterface(me.chat, type="messages").launch()
-    
+
+me = Me()
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Srict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Error: {exec}", exc_info=True)
+    return JSONResponse(
+    status_code=500,
+        content={"error": "An internal errror occurred"}
+    )
+
+# API for handling chat POST requests
+@app.post("/chat")
+@limiter.limit("10/minute")
+async def chat_endpoint(request: Request):
+    body = await request.json()
+    message = body.get("message")
+    history = body.get("history", [])
+
+    if len(str(request.body())) > 4096:
+        raise HTTPException(status_code=413, detail="Request too large")
+
+    if not message:
+        return JSONResponse(content={"error": "Missing required 'message' field."}, status_code=400)
+
+    try:
+        # Pass the input message and optional chat history to Me.chat
+        response = me.chat(message, history)
+        return JSONResponse(content={"response": response})
+    except Exception as e:
+        # Handle unexpected errors gracefully
+        return JSONResponse(content={"error": str(e)}, status_code=500)
