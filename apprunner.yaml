@@ -1,0 +1,15 @@
+version: 1.0 # version of the specification
+runtime: python3 # runtime to use
+build:
+  commands:
+    build:
+      - uv sync # install dependencies
+
+  env: # define environment variables
+    - name: PORT
+      value: '8080'
+
+run:
+  command: uv run app/main.py # command to run fastapi
+  network:
+    port: 8080 # port AppRunner will expose
