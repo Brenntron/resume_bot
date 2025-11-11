@@ -17,8 +17,6 @@ class Settings(BaseSettings):
     openai_api_key: str
     pushover_token: str
     pushover_user: str
-    allowed_origins: list[str]
-    allowed_hosts: list[str]
     environment: str = "production"  # default to production for safety
 
     class Config:
@@ -35,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_origins,
+    allow_origins=["http://localhost:3000", "https://brenntron.dev", "https://www.brenntron.dev"],
     allow_credentials=True,
     allow_methods=["post"],
     allow_headers=["*"],
@@ -43,7 +41,7 @@ app.add_middleware(
 )
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=settings.allowed_hosts
+    allowed_hosts=["brenntron.dev", "*.brenntron.dev", "localhost"]
 )
 
 # Only enable HTTPS redirect in production
